@@ -129,6 +129,9 @@ export type SocketConfig = {
     /** list to ignore link preview */
     blacklistLinkPreview: string[]
 
+    /** enable or disable sendMessagesAgain */
+    resendReceipt: boolean
+
     /** Socket passthrough */
     socket?: any
 }

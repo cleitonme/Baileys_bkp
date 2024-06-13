@@ -51,6 +51,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		shouldIgnoreJid,
 		shouldIgnoreParticipant,
 		ignoreOfflineMessages,
+		resendReceipt
 	} = config
 	const sock = makeMessagesSocket(config)
 	const {
@@ -618,8 +619,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 					if(
 						typeof status !== 'undefined' &&
 						(
-							// basically, we only want to know when a message from us has been delivered to/read by the other person
-							// or another device of ours has read some messages
+							// basically, we only want to know when a message from us has been delivered to/read by the other person or another device of ours has read some messages
 							status > proto.WebMessageInfo.Status.DELIVERY_ACK ||
 							!isNodeFromMe
 						)
@@ -651,10 +651,10 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 
 					key.participant = key.participant || attrs.from
 
-					if(attrs.type === 'retry' && key.fromMe) {
+					if(attrs.type === 'retry' && key.fromMe && resendReceipt) {
 						if (willSendMessageAgain(ids[0], key.participant)){
 							const retryUser: number = msgRetryCache.get(key.participant) || 0
-							if (retryUser < 3){
+							if (retryUser < 2){
 								logger.debug({ attrs, key }, 'recv retry request')
 								const retryNode = getBinaryNodeChild(node, 'retry')
 								await sendMessagesAgain(key, ids, retryNode!)
@@ -720,7 +720,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 
 		if(isJidGroup(node.attrs.from) && shouldIgnoreParticipant(node.attrs.participant)){
 			logger.debug({ key: node.attrs.key }, 'ignored participant message')
-      			await sendMessageAck(node)
+      		await sendMessageAck(node)
 			return
 		}
 
