@@ -126,6 +126,12 @@ export type SocketConfig = {
 
     makeSignalRepository: (auth: SignalAuthState) => SignalRepository
 
+    /** list to ignore link preview */
+    blacklistLinkPreview: string[]
+
+    /** enable or disable sendMessagesAgain */
+    resendReceipt: boolean
+
     /** Socket passthrough */
     socket?: any
 }
