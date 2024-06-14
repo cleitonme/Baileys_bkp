@@ -417,7 +417,6 @@ export const makeSocket = (config: SocketConfig) => {
 			}
 
 			const diff = Date.now() - lastDateRecv.getTime()
-			ev.ping = diff
 			/*
 				check if it's been a suspicious amount of time since the server responded with our last seen
 				it could be that the network is down
