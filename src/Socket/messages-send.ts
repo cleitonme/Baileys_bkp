@@ -770,7 +770,13 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					additionalAttributes.edit = '1'
 				}
 
+				const init = Date.now()
+
 				await relayMessage(jid, fullMsg.message!, { messageId: fullMsg.key.id!, useCachedGroupMetadata: options.useCachedGroupMetadata, additionalAttributes, statusJidList: options.statusJidList })
+
+				ev.lastPings = [...ev.lastPings.slice(-249), ev.lastPings.push(Date.now() - init)]
+				ev.ping = Math.round(ev.lastPings.reduce((p, i) => p + i) / ev.lastPings.length)
+
 				if(config.emitOwnEvents) {
 					process.nextTick(() => {
 						processingMutex.mutex(() => (
