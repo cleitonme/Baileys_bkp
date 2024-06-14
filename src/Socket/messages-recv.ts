@@ -577,6 +577,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			})
 			authState.creds.registered = true
 			ev.emit('creds.update', authState.creds)
+			break
 		}
 
 		if(Object.keys(result).length) {
