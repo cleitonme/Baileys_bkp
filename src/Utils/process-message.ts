@@ -320,7 +320,6 @@ const processMessage = async(
 			if(participantsIncludesMe()) {
 				chat.readOnly = true
 			}
-
 			break
 		case WAMessageStubType.GROUP_PARTICIPANT_ADD:
 		case WAMessageStubType.GROUP_PARTICIPANT_INVITE:
@@ -329,7 +328,6 @@ const processMessage = async(
 			if(participantsIncludesMe()) {
 				chat.readOnly = false
 			}
-
 			emitParticipantsUpdate('add')
 			break
 		case WAMessageStubType.GROUP_PARTICIPANT_DEMOTE:
