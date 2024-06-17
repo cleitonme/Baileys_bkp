@@ -190,11 +190,11 @@ export const generateMessageIDV2 = (userId?: string): string => {
 	data.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 1000)))
   
 	if (userId) {
-	  const id = jidDecode(userId)
-	  if (id?.user) {
-		  data.write(id.user, 8)
-		  data.write('@c.us', 8 + id.user.length)
-	  }
+	  	const id = jidDecode(userId)
+	  	if (id?.user) {
+			data.write(id.user, 8)
+			data.write('@c.us', 8 + id.user.length)
+	  	}
 	}
   
 	const random = randomBytes(16)
