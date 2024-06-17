@@ -119,14 +119,14 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		await sendNode(stanza)
 	}
 
-	const offerCall = async (toJid: string, isVideo: boolean = false) => {
+	const offerCall = async(toJid: string, isVideo = false) => {
 		const callId = randomBytes(16).toString('hex').toUpperCase().substring(0, 64)
 
 		const offerContent: BinaryNode[] = []
 		offerContent.push({ tag: 'audio', attrs: { enc: 'opus', rate: '16000' }, content: undefined })
 		offerContent.push({ tag: 'audio', attrs: { enc: 'opus', rate: '8000' }, content: undefined })
 
-		if (isVideo) {
+		if(isVideo) {
 			offerContent.push({
 				tag: 'video',
 				attrs: {
@@ -158,7 +158,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 
 		offerContent.push({ tag: 'destination', attrs: {}, content: destinations })
 
-		if (shouldIncludeDeviceIdentity) {
+		if(shouldIncludeDeviceIdentity) {
 			offerContent.push({
 				tag: 'device-identity',
 				attrs: {},
@@ -398,7 +398,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 
 			break
 		case 'membership_approval_mode':
-			const approvalMode: any = getBinaryNodeChild(child, 'group_join')
+			const approvalMode: BinaryNode = getBinaryNodeChild(child, 'group_join')!
 			if(approvalMode) {
 				msg.messageStubType = WAMessageStubType.GROUP_MEMBERSHIP_JOIN_APPROVAL_MODE
 				msg.messageStubParameters = [ approvalMode.attrs.state ]
@@ -676,7 +676,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			return
 		}
 
-		if(isJidGroup(attrs.from) && shouldIgnoreParticipant(attrs.participant)){
+		if(isJidGroup(attrs.from) && shouldIgnoreParticipant(attrs.participant)) {
 			logger.debug({ remoteJid }, 'ignoring receipt from participant')
 			await sendMessageAck(node)
 			return
@@ -728,9 +728,9 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 					key.participant = key.participant || attrs.from
 
 					if(attrs.type === 'retry' && key.fromMe && resendReceipt) {
-						if (willSendMessageAgain(ids[0], key.participant)){
+						if(willSendMessageAgain(ids[0], key.participant)) {
 							const retryUser: number = msgRetryCache.get(key.participant) || 0
-							if (retryUser < 2){
+							if(retryUser < 2) {
 								logger.debug({ attrs, key }, 'recv retry request')
 								const retryNode = getBinaryNodeChild(node, 'retry')
 								await sendMessagesAgain(key, ids, retryNode!)
@@ -751,7 +751,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 	const handleNotification = async(node: BinaryNode) => {
 		const remoteJid = node.attrs.from
 
-		if (!node.attrs?.from){
+		if(!node.attrs?.from) {
 			logger.debug({ remoteJid, id: node.attrs.id }, 'ignored null jid')
 			await sendMessageAck(node)
 			return
@@ -763,7 +763,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			return
 		}
 
-		if(isJidGroup(remoteJid) && shouldIgnoreParticipant(node.attrs.participant)){
+		if(isJidGroup(remoteJid) && shouldIgnoreParticipant(node.attrs.participant)) {
 			logger.debug({ remoteJid, id: node.attrs.id }, 'ignored notification')
 			await sendMessageAck(node)
 			return
@@ -795,25 +795,25 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 	}
 
 	const handleMessage = async(node: BinaryNode) => {
-		if (!node.attrs?.from){
+		if(!node.attrs?.from) {
 			logger.debug({ from: node.attrs?.from || null, id: node.attrs.id }, 'ignored null jid')
 			await sendMessageAck(node)
 			return
 		}
-	
+
     	if(ignoreOfflineMessages && node.attrs.offline) {
 			logger.debug({ key: node.attrs.key }, 'ignored offline message')
 			await sendMessageAck(node)
 			return
 		}
 
-		if(isJidGroup(node.attrs.from) && shouldIgnoreParticipant(node.attrs.participant)){
+		if(isJidGroup(node.attrs.from) && shouldIgnoreParticipant(node.attrs.participant)) {
 			logger.debug({ key: node.attrs.key }, 'ignored participant message')
       		await sendMessageAck(node)
 			return
 		}
 
-		if(shouldIgnoreJid(node.attrs.from!) && node.attrs.from! !== '@s.whatsapp.net' && !areJidsSameUser(node.attrs.from!, authState.creds.me!.id)) {
+		if(shouldIgnoreJid(node.attrs.from) && node.attrs.from !== '@s.whatsapp.net' && !areJidsSameUser(node.attrs.from, authState.creds.me!.id)) {
 			logger.debug({ key: node.attrs.key }, 'ignored message')
 			await sendMessageAck(node)
 			return
