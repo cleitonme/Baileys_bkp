@@ -1,7 +1,7 @@
 import { Boom } from '@hapi/boom'
 import { proto } from '../../WAProto'
 import { PROCESSABLE_HISTORY_TYPES } from '../Defaults'
-import { ALL_WA_PATCH_NAMES, ChatModification, ChatMutation, LTHashState, MessageUpsertType, PresenceData, SocketConfig, WABusinessHoursConfig, WABusinessProfile, WAMediaUpload, WAMessage, WAPatchCreate, WAPatchName, WAPresence, WAPrivacyOnlineValue, WAPrivacyValue, WAReadReceiptsValue, WAPrivacyCallValue } from '../Types'
+import { ALL_WA_PATCH_NAMES, ChatModification, ChatMutation, LTHashState, MessageUpsertType, PresenceData, SocketConfig, WABusinessHoursConfig, WABusinessProfile, WAMediaUpload, WAMessage, WAPatchCreate, WAPatchName, WAPresence, WAPrivacyCallValue, WAPrivacyOnlineValue, WAPrivacyValue, WAReadReceiptsValue } from '../Types'
 import { chatModificationToAppPatch, ChatMutationMap, decodePatches, decodeSyncdSnapshot, encodeSyncdPatch, extractSyncdPatches, generateProfilePicture, getHistoryMsg, newLTHashState, processSyncAction } from '../Utils'
 import { makeMutex } from '../Utils/make-mutex'
 import processMessage from '../Utils/process-message'
@@ -202,10 +202,10 @@ export const makeChatsSocket = (config: SocketConfig) => {
 			{ tag: 'status', attrs: {} }
 		)
 		return results.map(item => {
-			const status = getBinaryNodeChild(item, 'status')
+			const status = getBinaryNodeChild(item, 'status')!
 			return {
 				user: item.attrs.jid,
-				status: status && status.content ? status.content.toString() : null,
+				status: status?.content?.toString() || null,
 				setAt: new Date(+(status?.attrs.t || 0) * 1000)
 			}
 		})
@@ -218,10 +218,10 @@ export const makeChatsSocket = (config: SocketConfig) => {
 			{ tag: 'disappearing_mode', attrs: {} }
 		)
 		return results.map(item => {
-			const result = getBinaryNodeChild(item, 'disappearing_mode')
+			const result = getBinaryNodeChild(item, 'disappearing_mode')!
 			return {
 				user: item.attrs.jid,
-				duration: parseInt((result as any)?.attrs.duration),
+				duration: parseInt(result?.attrs.duration),
 				setAt: new Date(+(result?.attrs.t || 0) * 1000)
 			}
 		})
@@ -627,7 +627,7 @@ export const makeChatsSocket = (config: SocketConfig) => {
 			return
 		}
 
-		if(jid.endsWith('@g.us') && shouldIgnoreParticipant(participant)){
+		if(jid.endsWith('@g.us') && shouldIgnoreParticipant(participant)) {
 			return
 		}
 
@@ -1004,6 +1004,7 @@ export const makeChatsSocket = (config: SocketConfig) => {
 		updateProfileStatus,
 		updateProfileName,
 		updateBlockStatus,
+		updateCallPrivacy,
 		updateLastSeenPrivacy,
 		updateOnlinePrivacy,
 		updateProfilePicturePrivacy,
