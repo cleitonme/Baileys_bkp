@@ -328,7 +328,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 		msgId = msgId || generateMessageID()
 		useUserDevicesCache = useUserDevicesCache !== false
-		useCachedGroupMetadata = useCachedGroupMetadata !== false && !isStatus
+		useCachedGroupMetadata = useCachedGroupMetadata !== false && !isStatus && !!cachedGroupMetadata
 
 		const participants: BinaryNode[] = []
 		const destinationJid = (!isStatus) ? jidEncode(user, isLid ? 'lid' : isGroup ? 'g.us' : 's.whatsapp.net') : statusJid
@@ -360,10 +360,12 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				if(isGroup || isStatus) {
 					const [groupData, senderKeyMap] = await Promise.all([
 						(async() => {
-							let groupData = useCachedGroupMetadata && cachedGroupMetadata ? await cachedGroupMetadata(jid) : undefined
-							if(groupData && Array.isArray(groupData?.participants)) {
+							let groupData = useCachedGroupMetadata ? await cachedGroupMetadata(jid) : undefined
+							if(groupData) {
 								logger.trace({ jid, participants: groupData.participants.length }, 'using cached group metadata')
-							} else {
+							}
+
+							if(!groupData && !isStatus) {
 								groupData = await groupMetadata(jid)
 							}
 
