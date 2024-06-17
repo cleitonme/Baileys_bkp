@@ -80,14 +80,14 @@ const extractVideoThumb = async(
 	time: string,
 	size: { width: number, height: number },
 ) => new Promise((resolve, reject) => {
-    	const cmd = `ffmpeg -ss ${time} -i ${path} -y -vf scale=${size.width}:-1 -vframes 1 -f image2 ${destPath}`
-    	exec(cmd, (err) => {
-    		if(err) {
+		const cmd = `ffmpeg -ss ${time} -i ${path} -y -vf scale=${size.width}:-1 -vframes 1 -f image2 ${destPath}`
+		exec(cmd, (err) => {
+			if(err) {
 				reject(err)
 			} else {
 				resolve(1)
 			}
-    	})
+		})
 })
 
 export const extractImageThumb = async(bufferOrFilePath: Readable | Buffer | string, width = 32) => {
@@ -290,8 +290,8 @@ export async function generateThumbnail(
 	file: string,
 	mediaType: 'video' | 'image',
 	options: {
-        logger?: Logger
-    }
+		logger?: Logger
+	}
 ) {
 	let thumbnail: string | undefined
 	let originalImageDimensions: { width: number, height: number } | undefined
@@ -453,8 +453,8 @@ const toSmallestChunkSize = (num: number) => {
 }
 
 export type MediaDownloadOptions = {
-    startByte?: number
-    endByte?: number
+	startByte?: number
+	endByte?: number
 	options?: AxiosRequestConfig<any>
 }
 
