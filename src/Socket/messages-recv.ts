@@ -374,6 +374,11 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			msg.messageStubType = WAMessageStubType.GROUP_CHANGE_SUBJECT
 			msg.messageStubParameters = [ child.attrs.subject ]
 			break
+		case 'description':
+			const description = getBinaryNodeChild(child, 'body')?.content?.toString()
+			msg.messageStubType = WAMessageStubType.GROUP_CHANGE_DESCRIPTION
+			msg.messageStubParameters = description ? [ description ] : undefined
+			break
 		case 'announcement':
 		case 'not_announcement':
 			msg.messageStubType = WAMessageStubType.GROUP_CHANGE_ANNOUNCE
@@ -472,7 +477,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			const delPicture = getBinaryNodeChild(node, 'delete')
 
 			ev.emit('contacts.update', [{
-				id: jidNormalizedUser(node?.attrs?.jid) || from || ((setPicture || delPicture)?.attrs?.hash) || '',
+				id: from || ((setPicture || delPicture)?.attrs?.hash) || '',
 				imgUrl: setPicture ? 'changed' : 'removed'
 			}])
 
