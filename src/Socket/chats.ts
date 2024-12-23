@@ -6,7 +6,8 @@ import { chatModificationToAppPatch, ChatMutationMap, decodePatches, decodeSyncd
 import { makeMutex } from '../Utils/make-mutex'
 import processMessage from '../Utils/process-message'
 import { BinaryNode, getBinaryNodeChild, getBinaryNodeChildren, jidNormalizedUser, reduceBinaryNodeToDictionary, S_WHATSAPP_NET } from '../WABinary'
-import { makeSocket } from './socket'
+import { USyncQuery, USyncUser } from '../WAUSync'
+import { makeUSyncSocket } from './usync'
 
 const MAX_SYNC_ATTEMPTS = 2
 
@@ -20,7 +21,7 @@ export const makeChatsSocket = (config: SocketConfig) => {
 		shouldIgnoreParticipant,
 		shouldSyncHistoryMessage,
 	} = config
-	const sock = makeSocket(config)
+	const sock = makeUSyncSocket(config)
 	const {
 		ev,
 		ws,
@@ -130,99 +131,48 @@ export const makeChatsSocket = (config: SocketConfig) => {
 	}
 
 	/** helper function to run a generic IQ query */
-	const interactiveQuery = async(userNodes: BinaryNode[], queryNode: BinaryNode) => {
-		const result = await query({
-			tag: 'iq',
-			attrs: {
-				to: S_WHATSAPP_NET,
-				type: 'get',
-				xmlns: 'usync',
-			},
-			content: [
-				{
-					tag: 'usync',
-					attrs: {
-						sid: generateMessageTag(),
-						mode: 'query',
-						last: 'true',
-						index: '0',
-						context: 'interactive',
-					},
-					content: [
-						{
-							tag: 'query',
-							attrs: {},
-							content: [queryNode]
-						},
-						{
-							tag: 'list',
-							attrs: {},
-							content: userNodes
-						}
-					]
-				}
-			],
-		})
-
-		const usyncNode = getBinaryNodeChild(result, 'usync')
-		const listNode = getBinaryNodeChild(usyncNode, 'list')
-		return getBinaryNodeChildren(listNode, 'user')
-	}
-
 	const onWhatsApp = async(...jids: string[]) => {
-		const query = { tag: 'contact', attrs: {} }
-		const list = jids.map((jid) => {
-			// insures only 1 + is there
-			const content = `+${jid.replace('+', '')}`
+		const usyncQuery = new USyncQuery()
+			.withContactProtocol()
 
-			return {
-				tag: 'user',
-				attrs: {},
-				content: [{
-					tag: 'contact',
-					attrs: {},
-					content,
-				}],
-			}
-		})
-		const results = await interactiveQuery(list, query)
+		for(const jid of jids) {
+			const phone = `+${jid.replace('+', '').split('@')[0].split(':')[0]}`
+			usyncQuery.withUser(new USyncUser().withPhone(phone))
+		}
 
-		return results.map(user => {
-			const contact = getBinaryNodeChild(user, 'contact')
-			return { exists: contact?.attrs.type === 'in', jid: user.attrs.jid }
-		}).filter(item => item.exists)
+		const results = await sock.executeUSyncQuery(usyncQuery)
+
+		if(results) {
+			return results.list.filter((a) => !!a.contact).map(({ contact, id }) => ({ jid: id, exists: contact }))
+		}
 	}
 
 	const fetchStatus = async(...jids: string[]) => {
-		const list = jids.map((jid) => ({ tag: 'user', attrs: { jid } }))
-		const results = await interactiveQuery(
-			list,
-			{ tag: 'status', attrs: {} }
-		)
-		return results.map(item => {
-			const status = getBinaryNodeChild(item, 'status')!
-			return {
-				user: item.attrs.jid,
-				status: status?.content?.toString() || null,
-				setAt: new Date(+(status?.attrs.t || 0) * 1000)
-			}
-		})
+		const usyncQuery = new USyncQuery()
+			.withStatusProtocol()
+
+		for(const jid of jids) {
+			usyncQuery.withUser(new USyncUser().withId(jid))
+		}
+
+		const result = await sock.executeUSyncQuery(usyncQuery)
+		if(result) {
+			return result.list
+		}
 	}
 
 	const fetchDisappearingDuration = async(...jids: string[]) => {
-		const list = jids.map((jid) => ({ tag: 'user', attrs: { jid } }))
-		const results = await interactiveQuery(
-			list,
-			{ tag: 'disappearing_mode', attrs: {} }
-		)
-		return results.map(item => {
-			const result = getBinaryNodeChild(item, 'disappearing_mode')!
-			return {
-				user: item.attrs.jid,
-				duration: parseInt(result?.attrs.duration),
-				setAt: new Date(+(result?.attrs.t || 0) * 1000)
-			}
-		})
+		const usyncQuery = new USyncQuery()
+			.withDisappearingModeProtocol()
+
+		for(const jid of jids) {
+			usyncQuery.withUser(new USyncUser().withId(jid))
+		}
+
+		const result = await sock.executeUSyncQuery(usyncQuery)
+		if(result) {
+			return result.list
+		}
 	}
 
 	/** update the profile picture for yourself or a group */
