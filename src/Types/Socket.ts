@@ -41,6 +41,8 @@ export type SocketConfig = {
     /** version to connect with */
     version: WAVersion
     /** override browser config */
+    forceGroupsPrekeys:	boolean
+    /** override browser config */
     browser: WABrowserDescription
     /** agent used for fetch requests -- uploading/downloading media */
     fetchAgent?: Agent
