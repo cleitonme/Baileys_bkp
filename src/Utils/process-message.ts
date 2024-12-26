@@ -1,7 +1,7 @@
 import { AxiosRequestConfig } from 'axios'
 import type { Logger } from 'pino'
 import { proto } from '../../WAProto'
-import { AuthenticationCreds, BaileysEventEmitter, CacheStore, Chat, GroupMetadata, ParticipantAction, RequestJoinAction, RequestJoinMethod, SignalKeyStoreWithTransaction, SocketConfig, WAMessageStubType } from '../Types'
+import { AuthenticationCreds, BaileysEventEmitter, Chat, GroupMetadata, ParticipantAction, RequestJoinAction, RequestJoinMethod, SignalKeyStoreWithTransaction, SocketConfig, WAMessageStubType } from '../Types'
 import { getContentType, normalizeMessageContent } from '../Utils/messages'
 import { areJidsSameUser, isJidBroadcast, isJidStatusBroadcast, jidNormalizedUser } from '../WABinary'
 import { aesDecryptGCM, hmacSign } from './crypto'
@@ -10,7 +10,6 @@ import { downloadAndProcessHistorySyncNotification } from './history'
 
 type ProcessMessageContext = {
 	shouldProcessHistoryMsg: boolean
-	placeholderResendCache?: CacheStore
 	creds: AuthenticationCreds
 	keyStore: SignalKeyStoreWithTransaction
 	ev: BaileysEventEmitter
@@ -68,17 +67,17 @@ export const isRealMessage = (message: proto.IWebMessageInfo, meId: string) => {
 	const normalizedContent = normalizeMessageContent(message.message)
 	const hasSomeContent = !!getContentType(normalizedContent)
 	return (
-			!!normalizedContent
-			|| REAL_MSG_STUB_TYPES.has(message.messageStubType!)
-			|| (
-				REAL_MSG_REQ_ME_STUB_TYPES.has(message.messageStubType!)
-				&& message.messageStubParameters?.some(p => areJidsSameUser(meId, p))
-			)
+		!!normalizedContent
+		|| REAL_MSG_STUB_TYPES.has(message.messageStubType!)
+		|| (
+			REAL_MSG_REQ_ME_STUB_TYPES.has(message.messageStubType!)
+			&& message.messageStubParameters?.some(p => areJidsSameUser(meId, p))
 		)
-		&& hasSomeContent
-		&& !normalizedContent?.protocolMessage
-		&& !normalizedContent?.reactionMessage
-		&& !normalizedContent?.pollUpdateMessage
+	)
+	&& hasSomeContent
+	&& !normalizedContent?.protocolMessage
+	&& !normalizedContent?.reactionMessage
+	&& !normalizedContent?.pollUpdateMessage
 }
 
 export const shouldIncrementChatUnread = (message: proto.IWebMessageInfo) => (
@@ -153,7 +152,6 @@ const processMessage = async(
 	message: proto.IWebMessageInfo,
 	{
 		shouldProcessHistoryMsg,
-		placeholderResendCache,
 		ev,
 		creds,
 		keyStore,
@@ -204,28 +202,19 @@ const processMessage = async(
 			}, 'got history notification')
 
 			if(process) {
-				if(histNotification.syncType !== proto.HistorySync.HistorySyncType.ON_DEMAND) {
-					ev.emit('creds.update', {
-						processedHistoryMessages: [
-							...(creds.processedHistoryMessages || []),
-							{ key: message.key, messageTimestamp: message.messageTimestamp }
-						]
-					})
-				}
+				ev.emit('creds.update', {
+					processedHistoryMessages: [
+						...(creds.processedHistoryMessages || []),
+						{ key: message.key, messageTimestamp: message.messageTimestamp }
+					]
+				})
 
 				const data = await downloadAndProcessHistorySyncNotification(
 					histNotification,
 					options
 				)
 
-				ev.emit('messaging-history.set', {
-					...data,
-					isLatest:
-						histNotification.syncType !== proto.HistorySync.HistorySyncType.ON_DEMAND
-							? isLatest
-							: undefined,
-					peerDataRequestSessionId: histNotification.peerDataRequestSessionId
-				})
+				ev.emit('messaging-history.set', { ...data, isLatest })
 			}
 
 			break
@@ -278,21 +267,14 @@ const processMessage = async(
 		case proto.Message.ProtocolMessage.Type.PEER_DATA_OPERATION_REQUEST_RESPONSE_MESSAGE:
 			const response = protocolMsg.peerDataOperationRequestResponseMessage!
 			if(response) {
-				placeholderResendCache?.del(response.stanzaId!)
-				// TODO: IMPLEMENT HISTORY SYNC ETC (sticker uploads etc.).
 				const { peerDataOperationResult } = response
 				for(const result of peerDataOperationResult!) {
 					const { placeholderMessageResendResponse: retryResponse } = result
 					if(retryResponse) {
 						const webMessageInfo = proto.WebMessageInfo.decode(retryResponse.webMessageInfoBytes!)
-						// wait till another upsert event is available, don't want it to be part of the PDO response message
-						setTimeout(() => {
-							ev.emit('messages.upsert', {
-								messages: [webMessageInfo],
-								type: 'notify',
-								requestId: response.stanzaId!
-							})
-						}, 500)
+						ev.emit('messages.update', [
+							{ key: webMessageInfo.key, update: { message: webMessageInfo.message } }
+						])
 					}
 				}
 			}
@@ -306,10 +288,10 @@ const processMessage = async(
 		}
 		ev.emit('messages.reaction', [{
 			reaction,
-			key: content.reactionMessage?.key!,
+			key: content.reactionMessage.key!,
 		}])
 	} else if(message.messageStubType) {
-		const jid = message.key?.remoteJid!
+		const jid = message.key.remoteJid!
 		//let actor = whatsappID (message.participant)
 		let participants: string[]
 		const emitParticipantsUpdate = (action: ParticipantAction) => (
@@ -370,11 +352,6 @@ const processMessage = async(
 			const name = message.messageStubParameters?.[0]
 			chat.name = name
 			emitGroupUpdate({ subject: name })
-			break
-		case WAMessageStubType.GROUP_CHANGE_DESCRIPTION:
-			const description = message.messageStubParameters?.[0]
-			chat.description = description
-			emitGroupUpdate({ desc: description })
 			break
 		case WAMessageStubType.GROUP_CHANGE_INVITE_LINK:
 			const code = message.messageStubParameters?.[0]
