@@ -2,7 +2,7 @@ import { Boom } from '@hapi/boom'
 import { proto } from '../../WAProto'
 import { PROCESSABLE_HISTORY_TYPES } from '../Defaults'
 import { ALL_WA_PATCH_NAMES, ChatModification, ChatMutation, LTHashState, MessageUpsertType, PresenceData, SocketConfig, WABusinessHoursConfig, WABusinessProfile, WAMediaUpload, WAMessage, WAPatchCreate, WAPatchName, WAPresence, WAPrivacyCallValue, WAPrivacyOnlineValue, WAPrivacyValue, WAReadReceiptsValue } from '../Types'
-import { chatModificationToAppPatch, ChatMutationMap, decodePatches, decodeSyncdSnapshot, encodeSyncdPatch, extractSyncdPatches, generateProfilePicture, getHistoryMsg, newLTHashState, processSyncAction } from '../Utils'
+import { chatModificationToAppPatch, ChatMutationMap, decodePatches, decodeSyncdSnapshot, encodeSyncdPatch, extractSyncdPatches, generateProfilePicture, getHistoryMsg, newLTHashState, processSyncAction, delay } from '../Utils'
 import { makeMutex } from '../Utils/make-mutex'
 import processMessage from '../Utils/process-message'
 import { BinaryNode, getBinaryNodeChild, getBinaryNodeChildren, jidNormalizedUser, reduceBinaryNodeToDictionary, S_WHATSAPP_NET } from '../WABinary'
@@ -344,6 +344,36 @@ export const makeChatsSocket = (config: SocketConfig) => {
 					logger
 				)
 			}
+		}
+	}
+
+	const forceReset =  async(restart: boolean) =>
+	{
+		const props =  await fetchProps();
+		if(props?.attrs.refresh)
+		{
+			const newDuration = Number(props?.attrs.refresh)
+			const newSyncTime = Math.floor(Date.now() / 1000);
+			ev.emit('creds.update', {
+				lastAccountSyncTimestamp: newSyncTime,
+				processedHistoryMessages:[],
+				accountSettings: {
+					...authState.creds.accountSettings,
+					defaultDisappearingMode: {
+						ephemeralExpiration: newDuration,
+						ephemeralSettingTimestamp: newSyncTime
+					},
+				}
+			})
+			await delay(2000);
+		}
+		newAppStateChunkHandler(true);
+		await resyncAppState(['regular'], true);
+		await delay(5000);
+		if(restart)
+		{
+			ws.close();
+			await delay(5000);
 		}
 	}
 
@@ -702,9 +732,9 @@ export const makeChatsSocket = (config: SocketConfig) => {
 			},
 			content: [
 				{ tag: 'props', attrs: {
-					protocol: '2',
-					hash: authState?.creds?.lastPropHash || ''
-				} }
+						protocol: '2',
+						hash: authState?.creds?.lastPropHash || ''
+					} }
 			]
 		})
 
@@ -713,14 +743,19 @@ export const makeChatsSocket = (config: SocketConfig) => {
 
 		let props: { [_: string]: string } = {}
 		if(propsNode) {
-			authState.creds.lastPropHash = propsNode?.attrs?.hash
-			ev.emit('creds.update', authState.creds)
+			if(propsNode?.attrs?.hash)
+			{
+				authState.creds.lastPropHash = propsNode?.attrs?.hash
+				ev.emit('creds.update', authState.creds)
+			}
 			props = reduceBinaryNodeToDictionary(propsNode, 'prop')
+
+
 		}
 
 		logger.debug('fetched props')
 
-		return props
+		return propsNode
 	}
 
 	/**
@@ -969,6 +1004,7 @@ export const makeChatsSocket = (config: SocketConfig) => {
 		removeChatLabel,
 		addMessageLabel,
 		removeMessageLabel,
-		star
+		star,
+		forceReset
 	}
 }
