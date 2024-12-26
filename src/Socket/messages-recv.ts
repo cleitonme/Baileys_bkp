@@ -71,7 +71,6 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		uploadPreKeys,
 		createParticipantNodes,
 		getUSyncDevices,
-		forceReset
 	} = sock
 
 	/** this mutex ensures that each retryRequest will wait for the previous one to finish */
@@ -89,50 +88,6 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 	let sendActiveReceipts = false
 
 	const sendMessageAck = async({ tag, attrs, content }: BinaryNode) => {
-
-		const ack : BinaryNode = {
-			tag: 'ack',
-			attrs: {
-				id: attrs.id,
-				to: attrs.sender_lid || attrs.from,
-				class: tag
-			}
-		};
-
-		if(attrs.type)
-		{
-			ack.attrs.type = attrs.type;
-		}
-		if(attrs.participant)
-		{
-			ack.attrs.participant = attrs.participant;
-		}
-		sendNode(ack);
-
-		if (tag === 'message') {
-			const hasLowercaseAndDash = /[a-z]/.test(attrs.id) || /-/.test(attrs.id);
-			if (hasLowercaseAndDash) {
-				logger.error({ recv: { tag, attrs } }, 'Eliminando mensagem bugada. Sincronizando e recriando a conexão.');
-				await forceReset(true);
-
-			}
-		}
-		if (tag === 'receipt') {
-			const hasLowercaseAndDash = /[a-z]/.test(attrs.id) || /-/.test(attrs.id);
-			if (hasLowercaseAndDash) {
-				delete ack.attrs.class;
-				delete ack.attrs.type;
-				ack.attrs.t =  attrs.t;
-				sendNode(ack);
-			}
-		}
-
-
-
-
-
-		/* ACK INTEIRO FOI REFEITO POR CAUSA DE MENSAGENS SEM SER BUGADAS TRAVANDO O SOCKET!!
-
 		const stanza: BinaryNode = {
 			tag: 'ack',
 			attrs: {
@@ -142,64 +97,25 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			}
 		}
 
-		if (!!attrs.participant) {
-            stanza.attrs.participant = attrs.participant;
-        }
-        if (!!attrs.recipient) {
-            stanza.attrs.recipient = attrs.recipient;
-        }
+		if(!!attrs.participant) {
+			stanza.attrs.participant = attrs.participant
+		}
 
-        if (!!attrs.sender_lid) {
-            stanza.attrs.sender_lid = attrs.sender_lid;
-            stanza.attrs.to = attrs.sender_lid;
-        }
+		if(!!attrs.recipient) {
+			stanza.attrs.recipient = attrs.recipient
+		}
 
-    	if(!!attrs.type && (tag !== 'message' || getBinaryNodeChild({ tag, attrs, content }, 'unavailable'))) {
+
+    		if(!!attrs.type && (tag !== 'message' || getBinaryNodeChild({ tag, attrs, content }, 'unavailable'))) {
       			stanza.attrs.type = attrs.type
-    	}
+    		}
 
-    	if(tag === 'message' && getBinaryNodeChild({ tag, attrs, content }, 'unavailable')) {
+    		if(tag === 'message' && getBinaryNodeChild({ tag, attrs, content }, 'unavailable')) {
       			stanza.attrs.from = authState.creds.me!.id
-    	}
-
-		if(tag=='call')
-		{
-			stanza.attrs.to = attrs.from;
-			delete stanza.attrs.sender_lid;
-		}
-        if(tag==='message')
-        {
-         const hasLowercaseAndDash = /[a-z]/.test(attrs.id) || /-/.test(attrs.id);
-
-
-         if(hasLowercaseAndDash)
-            {
-			logger.error('Mensagem bugada detectada, refazendo a conexão com o socket e descartando a mensagem. Eventos de reconexão serão necessários.')
-			const time = Math.floor(Date.now() / 1000);
-			const type = 'available'
-
-
-			await generateProps();
-
-            const force : BinaryNode = {
-                tag: 'ack',
-                attrs: {
-                    id: attrs.id,
-                    to: stanza.attrs.to
-                      }
-            };
-            await sendNode(force);
-			ev.flush();
-			ev.emit('connection.update', { isOnline: type === 'available', connection: 'close' })
-
-            }
-
-		}
+    		}
 
 		logger.debug({ recv: { tag, attrs }, sent: stanza.attrs }, 'sent ack')
-		await sendNode(stanza);
-		*/
-
+		await sendNode(stanza)
 	}
 
 	const offerCall = async(toJid: string, isVideo = false) => {
