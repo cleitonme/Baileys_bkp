@@ -33,7 +33,7 @@ import {
 	makeEventBuffer,
 	makeNoiseHandler,
 	printQRIfNecessaryListener,
-	promiseTimeout
+	promiseTimeout,
 } from '../Utils'
 import {
 	assertNodeErrorFree,
@@ -372,6 +372,9 @@ export const makeSocket = (config: SocketConfig) => {
 
 		if(!ws.isClosed && !ws.isClosing) {
 			try {
+				ws.on('error', (err) => {
+					logger.error({ err: err })
+				})
 				ws.close()
 			} catch{ }
 		}
