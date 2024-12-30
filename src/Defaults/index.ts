@@ -58,7 +58,7 @@ export const DEFAULT_CONNECTION_CONFIG: SocketConfig = {
 	browser: Browsers.ubuntu('Chrome'),
 	waWebSocketUrl: 'wss://web.whatsapp.com/ws/chat',
 	logger: logger.child({ class: 'baileys' }),
-	defaultQueryTimeoutMs: undefined,
+	defaultQueryTimeoutMs: 60_000,
 	markOnlineOnConnect: true,
 	fireInitQueries: true,
 	printQRInTerminal: false,
@@ -134,6 +134,6 @@ export const INITIAL_PREKEY_COUNT = 30
 export const DEFAULT_CACHE_TTLS = {
 	SIGNAL_STORE: 10 * 60, // 10 minutes
 	MSG_RETRY: 60 * 60, // 1 hour
-	CALL_OFFER: 2 * 60, // 2 minutes
+	CALL_OFFER: 5 * 60, // 5 minutes
 	USER_DEVICES: 30 * 60, // 30 minutes
 }
