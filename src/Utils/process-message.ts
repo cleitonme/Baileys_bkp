@@ -288,10 +288,10 @@ const processMessage = async(
 		}
 		ev.emit('messages.reaction', [{
 			reaction,
-			key: content.reactionMessage.key!,
+			key: content.reactionMessage?.key!,
 		}])
 	} else if(message.messageStubType) {
-		const jid = message.key.remoteJid!
+		const jid = message.key?.remoteJid!
 		//let actor = whatsappID (message.participant)
 		let participants: string[]
 		const emitParticipantsUpdate = (action: ParticipantAction) => (
