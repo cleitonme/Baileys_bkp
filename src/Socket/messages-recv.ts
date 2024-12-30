@@ -775,7 +775,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			const items = getBinaryNodeChildren(content[0], 'item')
 			ids.push(...items.map(i => i.attrs.id))
 		}
-
+		await sendMessageAck(node)
 		await Promise.all([
 			processingMutex.mutex(
 				async() => {
@@ -835,7 +835,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 					}
 				}
 			),
-			sendMessageAck(node)
+			// sendMessageAck(node)
 		])
 	}
 
@@ -860,6 +860,8 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			return
 		}
 
+		await sendMessageAck(node)
+
 		await Promise.all([
 			processingMutex.mutex(
 				async() => {
@@ -881,7 +883,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 					}
 				}
 			),
-			sendMessageAck(node)
+			// sendMessageAck(node)
 		])
 	}
 
@@ -923,6 +925,8 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 				ev.emit('chats.phoneNumberShare', { lid: node.attrs.from, jid: node.attrs.sender_pn })
 			}
 		}
+
+		await sendMessageAck(node)
 
 		await Promise.all([
 			processingMutex.mutex(
@@ -974,7 +978,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 					await upsertMessage(msg, node.attrs.offline ? 'append' : 'notify')
 				}
 			),
-			sendMessageAck(node)
+		//	sendMessageAck(node)
 		])
 	}
 
