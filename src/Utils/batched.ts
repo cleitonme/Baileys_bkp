@@ -13,8 +13,6 @@ export function batched(fn: any, size: number, post: any) {
 			return post(results)
 		}
 
-        console.log("to aqui");
-
 		return results
 	}
 }
