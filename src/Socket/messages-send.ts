@@ -256,6 +256,34 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 	assertSessions = batched(assertSessions, BATCH_JID_SIZE, (results: boolean[]) => results.some(Boolean))
 
+	const sendPeerDataOperationMessage = async(
+		pdoMessage: proto.Message.IPeerDataOperationRequestMessage
+	): Promise<string> => {
+		//TODO: for later, abstract the logic to send a Peer Message instead of just PDO - useful for App State Key Resync with phone
+		if(!authState.creds.me?.id) {
+			throw new Boom('Not authenticated')
+		}
+
+		const protocolMessage: proto.IMessage = {
+			protocolMessage: {
+				peerDataOperationRequestMessage: pdoMessage,
+				type: proto.Message.ProtocolMessage.Type.PEER_DATA_OPERATION_REQUEST_MESSAGE
+			}
+		}
+
+		const meJid = jidNormalizedUser(authState.creds.me.id)!
+
+		const msgId = await relayMessage(meJid, protocolMessage, {
+			additionalAttributes: {
+				category: 'peer',
+				// eslint-disable-next-line camelcase
+				push_priority: 'high_force',
+			},
+		})
+
+		return msgId
+	}
+
 	const createParticipantNodes = async(
 		jids: string[],
 		message: proto.IMessage,
@@ -646,6 +674,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		fetchPrivacySettings,
 		getUSyncDevices,
 		createParticipantNodes,
+		sendPeerDataOperationMessage,
 		updateMediaMessage: async(message: proto.IWebMessageInfo) => {
 			const content = assertMediaContent(message.message)
 			const mediaKey = content.mediaKey!

@@ -9,6 +9,7 @@ import {
 	aesEncryptGCM,
 	Curve,
 	decodeMediaRetryNode,
+	decodeMessageNode,
 	decryptMessageNode,
 	delay,
 	derivePairingCodeKey,
@@ -72,6 +73,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		createParticipantNodes,
 		getUSyncDevices,
 		forceReset,
+		sendPeerDataOperationMessage,
 	} = sock
 
 	/** this mutex ensures that each retryRequest will wait for the previous one to finish */
@@ -83,6 +85,11 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 	})
 	const callOfferCache = config.callOfferCache || new NodeCache({
 		stdTTL: DEFAULT_CACHE_TTLS.CALL_OFFER, // 5 mins
+		useClones: false
+	})
+
+	const placeholderResendCache = config.placeholderResendCache || new NodeCache({
+		stdTTL: DEFAULT_CACHE_TTLS.MSG_RETRY, // 1 hour
 		useClones: false
 	})
 
@@ -298,6 +305,8 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 
 	const sendRetryRequest = async(node: BinaryNode, forceIncludeKeys = false) => {
 		const { id: msgId, participant } = node.attrs
+		const { fullMessage } = decodeMessageNode(node, authState.creds.me!.id, authState.creds.me!.lid || '')
+		const { key: msgKey } = fullMessage
 
 		const key = `${msgId}:${participant}`
 		let retryCount = msgRetryCache.get<number>(key) || 0
@@ -311,6 +320,12 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		msgRetryCache.set(key, retryCount)
 
 		const { account, signedPreKey, signedIdentityKey: identityKey } = authState.creds
+
+		if(retryCount === 1) {
+			//request a resend via phone
+			const msgResentId = await requestPlaceholderResend(msgKey)
+			logger.debug(`sendRetryRequest: requested placeholder resend for message ${msgId} - ${msgResentId}`)
+		}
 
 		const deviceIdentity = encodeSignedDeviceIdentity(account!, true)
 		await authState.keys.transaction(
@@ -987,6 +1002,42 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		])
 	}
 
+	const requestPlaceholderResend = async(messageKey: WAMessageKey): Promise<'RESOLVED'| string | undefined> => {
+		if(!authState.creds.me?.id) {
+			throw new Boom('Not authenticated')
+		}
+
+		if(placeholderResendCache.get(messageKey?.id!)) {
+			logger.debug('already requested resend', { messageKey })
+			return
+		} else {
+			placeholderResendCache.set(messageKey?.id!, true)
+		}
+
+		await delay(5000)
+
+		if(!placeholderResendCache.get(messageKey?.id!)) {
+			logger.debug({ messageKey }, 'message received while resend requested')
+			return 'RESOLVED'
+		}
+
+		const pdoMessage = {
+			placeholderMessageResendRequest: [{
+				messageKey
+			}],
+			peerDataOperationRequestType: proto.Message.PeerDataOperationRequestType.PLACEHOLDER_MESSAGE_RESEND
+		}
+
+		setTimeout(() => {
+			if(placeholderResendCache.get(messageKey?.id!)) {
+				logger.debug({ messageKey }, 'PDO message without response after 15 seconds. Phone possibly offline')
+				placeholderResendCache.del(messageKey?.id!)
+			}
+		}, 15_000)
+
+		return sendPeerDataOperationMessage(pdoMessage)
+	}
+
 	const handleCall = async(node: BinaryNode) => {
 		const { attrs } = node
 		const [infoChild] = getAllBinaryNodeChildren(node)
@@ -1139,6 +1190,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		sendMessageAck,
 		sendRetryRequest,
 		rejectCall,
-		offerCall
+		offerCall,
+		requestPlaceholderResend
 	}
 }
