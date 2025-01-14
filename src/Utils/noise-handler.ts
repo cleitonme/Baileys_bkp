@@ -183,7 +183,7 @@ export const makeNoiseHandler = ({
 				inBytes = inBytes.slice(size + 3)
 
 				if(isFinished) {
-					const result = decrypt(frame)
+					const result = decrypt(frame as Uint8Array)
 					frame = await decodeBinaryNode(result)
 				}
 

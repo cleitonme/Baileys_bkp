@@ -1,6 +1,6 @@
 {
   "name": "baileys",
-  "version": "6.7.63",
+  "version": "6.7.8",
   "description": "WhatsApp API",
   "keywords": [
     "whatsapp",
@@ -33,6 +33,7 @@
     "changelog:preview": "conventional-changelog -p angular -u",
     "changelog:update": "conventional-changelog -p angular -i CHANGELOG.md -s -r 0",
     "example": "node --inspect -r ts-node/register Example/example.ts",
+    "testExample": "node --inspect -r ts-node/register Example/test.ts",
     "example:mobile": "node --inspect -r ts-node/register Example/example.ts --mobile",
     "gen:protobuf": "sh WAProto/GenerateStatics.sh",
     "lint": "eslint src --ext .js,.ts,.jsx,.tsx",
@@ -51,10 +52,10 @@
     "cache-manager": "^5.7.6",
     "futoin-hkdf": "^1.5.1",
     "libphonenumber-js": "^1.10.20",
-    "libsignal": "github:cleitonme/libsignal-node",
+    "libsignal": "github:WhiskeySockets/libsignal-node",
     "lodash": "^4.17.21",
     "music-metadata": "^7.12.3",
-    "@cacheable/node-cache": "^1.4.0",
+    "node-cache": "^5.1.2",
     "pino": "^7.0.0",
     "protobufjs": "^7.2.4",
     "uuid": "^10.0.0",

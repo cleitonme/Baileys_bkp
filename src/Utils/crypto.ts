@@ -6,6 +6,7 @@ import { KEY_BUNDLE_TYPE } from '../Defaults'
 import { KeyPair } from '../Types'
 
 const pbkdf2Promise = promisify(pbkdf2)
+
 /** prefix version byte to the pub keys, required for some curve crypto functions */
 export const generateSignalPubKey = (pubKey: Uint8Array | Buffer) => (
 	pubKey.length === 33

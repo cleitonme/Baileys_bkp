@@ -68,17 +68,17 @@ export const isRealMessage = (message: proto.IWebMessageInfo, meId: string) => {
 	const normalizedContent = normalizeMessageContent(message.message)
 	const hasSomeContent = !!getContentType(normalizedContent)
 	return (
-			!!normalizedContent
-			|| REAL_MSG_STUB_TYPES.has(message.messageStubType!)
-			|| (
-				REAL_MSG_REQ_ME_STUB_TYPES.has(message.messageStubType!)
-				&& message.messageStubParameters?.some(p => areJidsSameUser(meId, p))
-			)
+		!!normalizedContent
+		|| REAL_MSG_STUB_TYPES.has(message.messageStubType!)
+		|| (
+			REAL_MSG_REQ_ME_STUB_TYPES.has(message.messageStubType!)
+			&& message.messageStubParameters?.some(p => areJidsSameUser(meId, p))
 		)
-		&& hasSomeContent
-		&& !normalizedContent?.protocolMessage
-		&& !normalizedContent?.reactionMessage
-		&& !normalizedContent?.pollUpdateMessage
+	)
+	&& hasSomeContent
+	&& !normalizedContent?.protocolMessage
+	&& !normalizedContent?.reactionMessage
+	&& !normalizedContent?.pollUpdateMessage
 }
 
 export const shouldIncrementChatUnread = (message: proto.IWebMessageInfo) => (
@@ -204,19 +204,28 @@ const processMessage = async(
 			}, 'got history notification')
 
 			if(process) {
-				ev.emit('creds.update', {
-					processedHistoryMessages: [
-						...(creds.processedHistoryMessages || []),
-						{ key: message.key, messageTimestamp: message.messageTimestamp }
-					]
-				})
+				if(histNotification.syncType !== proto.HistorySync.HistorySyncType.ON_DEMAND) {
+					ev.emit('creds.update', {
+						processedHistoryMessages: [
+							...(creds.processedHistoryMessages || []),
+							{ key: message.key, messageTimestamp: message.messageTimestamp }
+						]
+					})
+				}
 
 				const data = await downloadAndProcessHistorySyncNotification(
 					histNotification,
 					options
 				)
 
-				ev.emit('messaging-history.set', { ...data, isLatest })
+				ev.emit('messaging-history.set', {
+					...data,
+					isLatest:
+						histNotification.syncType !== proto.HistorySync.HistorySyncType.ON_DEMAND
+							? isLatest
+							: undefined,
+					peerDataRequestSessionId: histNotification.peerDataRequestSessionId
+				})
 			}
 
 			break
@@ -276,9 +285,14 @@ const processMessage = async(
 					const { placeholderMessageResendResponse: retryResponse } = result
 					if(retryResponse) {
 						const webMessageInfo = proto.WebMessageInfo.decode(retryResponse.webMessageInfoBytes!)
-						ev.emit('messages.update', [
-							{ key: webMessageInfo.key, update: { message: webMessageInfo.message } }
-						])
+						// wait till another upsert event is available, don't want it to be part of the PDO response message
+						setTimeout(() => {
+							ev.emit('messages.upsert', {
+								messages: [webMessageInfo],
+								type: 'notify',
+								requestId: response.stanzaId!
+							})
+						}, 500)
 					}
 				}
 			}
@@ -356,6 +370,11 @@ const processMessage = async(
 			const name = message.messageStubParameters?.[0]
 			chat.name = name
 			emitGroupUpdate({ subject: name })
+			break
+		case WAMessageStubType.GROUP_CHANGE_DESCRIPTION:
+			const description = message.messageStubParameters?.[0]
+			chat.description = description
+			emitGroupUpdate({ desc: description })
 			break
 		case WAMessageStubType.GROUP_CHANGE_INVITE_LINK:
 			const code = message.messageStubParameters?.[0]

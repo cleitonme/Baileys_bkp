@@ -1,5 +1,6 @@
 export * from './Auth'
 export * from './GroupMetadata'
+export * from './Newsletter'
 export * from './Chat'
 export * from './Contact'
 export * from './State'
@@ -21,16 +22,6 @@ export type BrowsersMap = {
     baileys(browser: string): [string, string, string]
     windows(browser: string): [string, string, string]
     appropriate(browser: string): [string, string, string]
-}
-
-export type valueReplacer = {
-	data: number[]
-	type: string
-}
-
-export type valueReviver = {
-	data: string
-	type: string
 }
 
 export enum DisconnectReason {

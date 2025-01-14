@@ -80,15 +80,15 @@ const extractVideoThumb = async(
 	time: string,
 	size: { width: number, height: number },
 ) => new Promise((resolve, reject) => {
-	const cmd = `ffmpeg -ss ${time} -i ${path} -y -vf scale=${size.width}:-1 -vframes 1 -f image2 ${destPath}`
-	exec(cmd, (err) => {
-		if(err) {
+    	const cmd = `ffmpeg -ss ${time} -i ${path} -y -vf scale=${size.width}:-1 -vframes 1 -f image2 ${destPath}`
+    	exec(cmd, (err) => {
+    		if(err) {
 			reject(err)
 		} else {
-			resolve(1)
+			resolve()
 		}
-	})
-})
+    	})
+}) as Promise<void>
 
 export const extractImageThumb = async(bufferOrFilePath: Readable | Buffer | string, width = 32) => {
 	if(bufferOrFilePath instanceof Readable) {
@@ -290,8 +290,8 @@ export async function generateThumbnail(
 	file: string,
 	mediaType: 'video' | 'image',
 	options: {
-		logger?: Logger
-	}
+        logger?: Logger
+    }
 ) {
 	let thumbnail: string | undefined
 	let originalImageDimensions: { width: number, height: number } | undefined
@@ -332,12 +332,13 @@ type EncryptedStreamOptions = {
 	saveOriginalFileIfRequired?: boolean
 	logger?: Logger
 	opts?: AxiosRequestConfig
+	raw?: boolean
 }
 
 export const encryptedStream = async(
 	media: WAMediaUpload,
 	mediaType: MediaType,
-	{ logger, saveOriginalFileIfRequired, opts }: EncryptedStreamOptions = {}
+	{ logger, saveOriginalFileIfRequired, opts, raw }: EncryptedStreamOptions = {}
 ) => {
 	const { stream, type } = await getStream(media, opts)
 
@@ -389,6 +390,9 @@ export const encryptedStream = async(
 			}
 
 			onChunk(aes.update(data))
+			if(raw) {
+			   encWriteStream.push(data)
+			}
 		}
 
 		onChunk(aes.final())
@@ -399,7 +403,10 @@ export const encryptedStream = async(
 		const fileSha256 = sha256Plain.digest()
 		const fileEncSha256 = sha256Enc.digest()
 
-		encWriteStream.push(mac)
+		if(!raw) {
+			encWriteStream.push(mac)
+		}
+
 		encWriteStream.push(null)
 
 		writeStream?.end()
@@ -441,7 +448,9 @@ export const encryptedStream = async(
 	function onChunk(buff: Buffer) {
 		sha256Enc = sha256Enc.update(buff)
 		hmac = hmac.update(buff)
-		encWriteStream.push(buff)
+		if(!raw) {
+		    encWriteStream.push(buff)
+		}
 	}
 }
 
@@ -453,8 +462,8 @@ const toSmallestChunkSize = (num: number) => {
 }
 
 export type MediaDownloadOptions = {
-	startByte?: number
-	endByte?: number
+    startByte?: number
+    endByte?: number
 	options?: AxiosRequestConfig<any>
 }
 
@@ -463,9 +472,14 @@ export const getUrlFromDirectPath = (directPath: string) => `https://${DEF_HOST}
 export const downloadContentFromMessage = (
 	{ mediaKey, directPath, url }: DownloadableMessage,
 	type: MediaType,
-	opts: MediaDownloadOptions = { }
+	opts: MediaDownloadOptions = { },
+	decrypt: boolean = true
 ) => {
 	const downloadUrl = url || getUrlFromDirectPath(directPath!)
+	if(!decrypt) {
+		return getHttpStream(downloadUrl, opts.options)
+	}
+
 	const keys = getMediaKeys(mediaKey, type)
 
 	return downloadEncryptedContent(downloadUrl, keys, opts)
@@ -600,7 +614,7 @@ export const getWAUploadToServer = (
 	{ customUploadHosts, fetchAgent, logger, options }: SocketConfig,
 	refreshMediaConn: (force: boolean) => Promise<MediaConnInfo>,
 ): WAMediaUploadFunction => {
-	return async(stream, { mediaType, fileEncSha256B64, timeoutMs }) => {
+	return async(stream, { mediaType, fileSha256B64, timeoutMs, newsletter }) => {
 		// send a query JSON to obtain the url & auth token to upload our media
 		let uploadInfo = await refreshMediaConn(false)
 
@@ -613,18 +627,22 @@ export const getWAUploadToServer = (
 		}
 
 		const reqBody = Buffer.concat(chunks)
-		fileEncSha256B64 = encodeBase64EncodedStringForUpload(fileEncSha256B64)
+		fileSha256B64 = encodeBase64EncodedStringForUpload(fileSha256B64)
 
-		for(const { hostname, maxContentLengthBytes } of hosts) {
+		for(const { hostname } of hosts) {
 			logger.debug(`uploading to "${hostname}"`)
 
 			const auth = encodeURIComponent(uploadInfo.auth) // the auth token
-			const url = `https://${hostname}${MEDIA_PATH_MAP[mediaType]}/${fileEncSha256B64}?auth=${auth}&token=${fileEncSha256B64}`
+			let urlPrefix: string | undefined
+			if (newsletter) {
+				urlPrefix = `/newsletter/newsletter-${mediaType}`
+			} else {
+				urlPrefix = MEDIA_PATH_MAP[mediaType]
+			}
+
+			const url = `https://${hostname}${urlPrefix}/${fileSha256B64}?auth=${auth}&token=${fileSha256B64}`
 			let result: any
 			try {
-				if(maxContentLengthBytes && reqBody.length > maxContentLengthBytes) {
-					throw new Boom(`Body too large for "${hostname}"`, { statusCode: 413 })
-				}
 
 				const body = await axios.post(
 					url,

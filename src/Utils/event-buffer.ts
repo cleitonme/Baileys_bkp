@@ -51,9 +51,6 @@ type BaileysBufferableEventEmitter = BaileysEventEmitter & {
 	flush(force?: boolean): boolean
 	/** is there an ongoing buffer */
 	isBuffering(): boolean
-	/** diff of ping */
-	ping: number
-	lastPings: number[]
 }
 
 /**
@@ -160,8 +157,6 @@ export const makeEventBuffer = (logger: Logger): BaileysBufferableEventEmitter =
 		on: (...args) => ev.on(...args),
 		off: (...args) => ev.off(...args),
 		removeAllListeners: (...args) => ev.removeAllListeners(...args),
-		ping: 0,
-		lastPings: [0, 0]
 	}
 }
 
@@ -235,6 +230,9 @@ function append<E extends BufferableEvent>(
 		}
 
 		data.historySets.empty = false
+		data.historySets.syncType = eventData.syncType
+		data.historySets.progress = eventData.progress
+		data.historySets.peerDataRequestSessionId = eventData.peerDataRequestSessionId
 		data.historySets.isLatest = eventData.isLatest || data.historySets.isLatest
 
 		break
@@ -526,7 +524,10 @@ function consolidateEvents(data: BufferedEventData) {
 			chats: Object.values(data.historySets.chats),
 			messages: Object.values(data.historySets.messages),
 			contacts: Object.values(data.historySets.contacts),
-			isLatest: data.historySets.isLatest
+			syncType: data.historySets.syncType,
+			progress: data.historySets.progress,
+			isLatest: data.historySets.isLatest,
+			peerDataRequestSessionId: data.historySets.peerDataRequestSessionId
 		}
 	}
 

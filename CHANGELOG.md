@@ -1,9 +1,9 @@
-## 6.7.4 (2024-06-02)
+## 6.7.8 (2024-09-22)
 
 
-### Bug Fixes
+### Features
 
-* **fix-routing-info:** initial commit ([#837](https://github.com/WhiskeySockets/Baileys/issues/837)) ([d7037cf](https://github.com/WhiskeySockets/Baileys/commit/d7037cf6fab71d86128c6f3eb4aeaeb3e7eccec3))
+* add label feature ([#955](https://github.com/WhiskeySockets/Baileys/issues/955)) ([6ff9455](https://github.com/WhiskeySockets/Baileys/commit/6ff945502d9e78c42a1d05fca79f951e81b946df))
 
 
 

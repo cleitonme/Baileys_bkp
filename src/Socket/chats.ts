@@ -1,14 +1,14 @@
 import { Boom } from '@hapi/boom'
-import NodeCache from '@cacheable/node-cache'
+import NodeCache from 'node-cache'
 import { proto } from '../../WAProto'
 import { DEFAULT_CACHE_TTLS, PROCESSABLE_HISTORY_TYPES } from '../Defaults'
 import { ALL_WA_PATCH_NAMES, ChatModification, ChatMutation, LTHashState, MessageUpsertType, PresenceData, SocketConfig, WABusinessHoursConfig, WABusinessProfile, WAMediaUpload, WAMessage, WAPatchCreate, WAPatchName, WAPresence, WAPrivacyCallValue, WAPrivacyGroupAddValue, WAPrivacyOnlineValue, WAPrivacyValue, WAReadReceiptsValue } from '../Types'
-import { chatModificationToAppPatch, ChatMutationMap, decodePatches, decodeSyncdSnapshot, encodeSyncdPatch, extractSyncdPatches, generateProfilePicture, getHistoryMsg, newLTHashState, processSyncAction, delay } from '../Utils'
+import { chatModificationToAppPatch, ChatMutationMap, decodePatches, decodeSyncdSnapshot, encodeSyncdPatch, extractSyncdPatches, generateProfilePicture, getHistoryMsg, newLTHashState, processSyncAction } from '../Utils'
 import { makeMutex } from '../Utils/make-mutex'
 import processMessage from '../Utils/process-message'
 import { BinaryNode, getBinaryNodeChild, getBinaryNodeChildren, jidNormalizedUser, reduceBinaryNodeToDictionary, S_WHATSAPP_NET } from '../WABinary'
-import { USyncQuery, USyncUser } from '../WAUSync'
-import { makeUSyncSocket } from './usync'
+import { makeSocket } from './socket'
+import { Label, LabelActionBody } from '../Types/Label'
 
 const MAX_SYNC_ATTEMPTS = 2
 
@@ -19,10 +19,9 @@ export const makeChatsSocket = (config: SocketConfig) => {
 		fireInitQueries,
 		appStateMacVerification,
 		shouldIgnoreJid,
-		shouldIgnoreParticipant,
 		shouldSyncHistoryMessage,
 	} = config
-	const sock = makeUSyncSocket(config)
+	const sock = makeSocket(config)
 	const {
 		ev,
 		ws,
@@ -141,57 +140,102 @@ export const makeChatsSocket = (config: SocketConfig) => {
 	}
 
 	/** helper function to run a generic IQ query */
+	const interactiveQuery = async(userNodes: BinaryNode[], queryNode: BinaryNode) => {
+		const result = await query({
+			tag: 'iq',
+			attrs: {
+				to: S_WHATSAPP_NET,
+				type: 'get',
+				xmlns: 'usync',
+			},
+			content: [
+				{
+					tag: 'usync',
+					attrs: {
+						sid: generateMessageTag(),
+						mode: 'query',
+						last: 'true',
+						index: '0',
+						context: 'interactive',
+					},
+					content: [
+						{
+							tag: 'query',
+							attrs: {},
+							content: [queryNode]
+						},
+						{
+							tag: 'list',
+							attrs: {},
+							content: userNodes
+						}
+					]
+				}
+			],
+		})
+
+		const usyncNode = getBinaryNodeChild(result, 'usync')
+		const listNode = getBinaryNodeChild(usyncNode, 'list')
+		const users = getBinaryNodeChildren(listNode, 'user')
+
+		return users
+	}
+
 	const onWhatsApp = async(...jids: string[]) => {
-		const usyncQuery = new USyncQuery()
-			.withContactProtocol()
+		const query = { tag: 'contact', attrs: {} }
+		const list = jids.map((jid) => {
+			// insures only 1 + is there
+			const content = `+${jid.replace('+', '')}`
 
-		for(const jid of jids) {
-			const phone = `+${jid.replace('+', '').split('@')[0].split(':')[0]}`
-			usyncQuery.withUser(new USyncUser().withPhone(phone))
-		}
+			return {
+				tag: 'user',
+				attrs: {},
+				content: [{
+					tag: 'contact',
+					attrs: {},
+					content,
+				}],
+			}
+		})
+		const results = await interactiveQuery(list, query)
 
-		const results = await sock.executeUSyncQuery(usyncQuery)
-
-		if(results) {
-			return results.list.filter((a) => !!a.contact).map(({ contact, id }) => ({ jid: id, exists: contact }))
-		}
+		return results.map(user => {
+			const contact = getBinaryNodeChild(user, 'contact')
+			return { exists: contact?.attrs.type === 'in', jid: user.attrs.jid }
+		}).filter(item => item.exists)
 	}
 
-	const fetchStatus = async(...jids: string[]) => {
-		const usyncQuery = new USyncQuery()
-			.withStatusProtocol()
-
-		for(const jid of jids) {
-			usyncQuery.withUser(new USyncUser().withId(jid))
-		}
-
-		const result = await sock.executeUSyncQuery(usyncQuery)
+	const fetchStatus = async(jid: string) => {
+		const [result] = await interactiveQuery(
+			[{ tag: 'user', attrs: { jid } }],
+			{ tag: 'status', attrs: {} }
+		)
 		if(result) {
-			return result.list
-		}
-	}
-
-	const fetchDisappearingDuration = async(...jids: string[]) => {
-		const usyncQuery = new USyncQuery()
-			.withDisappearingModeProtocol()
-
-		for(const jid of jids) {
-			usyncQuery.withUser(new USyncUser().withId(jid))
-		}
-
-		const result = await sock.executeUSyncQuery(usyncQuery)
-		if(result) {
-			return result.list
+			const status = getBinaryNodeChild(result, 'status')
+			return {
+				status: status?.content!.toString(),
+				setAt: new Date(+(status?.attrs.t || 0) * 1000)
+			}
 		}
 	}
 
 	/** update the profile picture for yourself or a group */
 	const updateProfilePicture = async(jid: string, content: WAMediaUpload) => {
+		let targetJid;
+		if(!jid) {
+			throw new Boom('Illegal no-jid profile update. Please specify either your ID or the ID of the chat you wish to update')
+		}
+
+		if(jidNormalizedUser(jid) !== jidNormalizedUser(authState.creds.me!.id)) {
+			targetJid = jidNormalizedUser(jid) // in case it is someone other than us
+		}
+
 		const { img } = await generateProfilePicture(content)
 		await query({
 			tag: 'iq',
 			attrs: {
-				to: jidNormalizedUser(jid),
+				target: targetJid,
+				to: S_WHATSAPP_NET,
 				type: 'set',
 				xmlns: 'w:profile:picture'
 			},
@@ -207,10 +251,20 @@ export const makeChatsSocket = (config: SocketConfig) => {
 
 	/** remove the profile picture for yourself or a group */
 	const removeProfilePicture = async(jid: string) => {
+		let targetJid;
+		if(!jid) {
+			throw new Boom('Illegal no-jid profile update. Please specify either your ID or the ID of the chat you wish to update')
+		}
+
+		if(jidNormalizedUser(jid) !== jidNormalizedUser(authState.creds.me!.id)) {
+			targetJid = jidNormalizedUser(jid) // in case it is someone other than us
+		}
+
 		await query({
 			tag: 'iq',
 			attrs: {
-				to: jidNormalizedUser(jid),
+				target: targetJid,
+				to: S_WHATSAPP_NET,
 				type: 'set',
 				xmlns: 'w:profile:picture'
 			}
@@ -354,36 +408,6 @@ export const makeChatsSocket = (config: SocketConfig) => {
 					logger
 				)
 			}
-		}
-	}
-
-	const forceReset =  async(restart: boolean) =>
-	{
-		const props =  await fetchProps();
-		if(props?.attrs.refresh)
-		{
-			const newDuration = Number(props?.attrs.refresh)
-			const newSyncTime = Math.floor(Date.now() / 1000);
-			ev.emit('creds.update', {
-				lastAccountSyncTimestamp: newSyncTime,
-				processedHistoryMessages:[],
-				accountSettings: {
-					...authState.creds.accountSettings,
-					defaultDisappearingMode: {
-						ephemeralExpiration: newDuration,
-						ephemeralSettingTimestamp: newSyncTime
-					},
-				}
-			})
-			await delay(2000);
-		}
-		newAppStateChunkHandler(true);
-		await resyncAppState(['regular'], true);
-		await delay(5000);
-		if(restart)
-		{
-			ws.close();
-			await delay(5000);
 		}
 	}
 
@@ -616,10 +640,6 @@ export const makeChatsSocket = (config: SocketConfig) => {
 			return
 		}
 
-		if(jid.endsWith('@g.us') && shouldIgnoreParticipant(participant)) {
-			return
-		}
-
 		if(tag === 'presence') {
 			presence = {
 				lastKnownPresence: attrs.type === 'unavailable' ? 'unavailable' : 'available',
@@ -742,9 +762,9 @@ export const makeChatsSocket = (config: SocketConfig) => {
 			},
 			content: [
 				{ tag: 'props', attrs: {
-						protocol: '2',
-						hash: authState?.creds?.lastPropHash || ''
-					} }
+					protocol: '2',
+					hash: authState?.creds?.lastPropHash || ''
+				} }
 			]
 		})
 
@@ -753,19 +773,16 @@ export const makeChatsSocket = (config: SocketConfig) => {
 
 		let props: { [_: string]: string } = {}
 		if(propsNode) {
-			if(propsNode?.attrs?.hash)
-			{
+			if(propsNode.attrs?.hash) { // on some clients, the hash is returning as undefined
 				authState.creds.lastPropHash = propsNode?.attrs?.hash
 				ev.emit('creds.update', authState.creds)
 			}
 			props = reduceBinaryNodeToDictionary(propsNode, 'prop')
-
-
 		}
 
 		logger.debug('fetched props')
 
-		return propsNode
+		return props
 	}
 
 	/**
@@ -786,6 +803,17 @@ export const makeChatsSocket = (config: SocketConfig) => {
 			star: {
 				messages,
 				star
+			}
+		}, jid)
+	}
+
+	/**
+	 * Adds label
+	 */
+	const addLabel = (jid: string, labels: LabelActionBody) => {
+		return chatModify({
+			addLabel: {
+				...labels
 			}
 		}, jid)
 	}
@@ -993,7 +1021,6 @@ export const makeChatsSocket = (config: SocketConfig) => {
 		onWhatsApp,
 		fetchBlocklist,
 		fetchStatus,
-		fetchDisappearingDuration,
 		updateProfilePicture,
 		removeProfilePicture,
 		updateProfileStatus,
@@ -1011,11 +1038,11 @@ export const makeChatsSocket = (config: SocketConfig) => {
 		resyncAppState,
 		chatModify,
 		cleanDirtyBits,
+		addLabel,
 		addChatLabel,
 		removeChatLabel,
 		addMessageLabel,
 		removeMessageLabel,
-		star,
-		forceReset
+		star
 	}
 }

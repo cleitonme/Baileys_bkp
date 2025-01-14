@@ -1,15 +1,14 @@
-name: Update Nightly
-
-permissions:
-  contents: write
+name: Publish Release
 
 on:
   push:
-    branches:
-      - master
+    tags:
+      - "v*"
+
+permissions: write-all
 
 jobs:
-  update-nightly:
+  publish-release:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -24,6 +23,9 @@ jobs:
         uses: actions/setup-node@v3.6.0
         with:
           node-version: 20.x
+          registry-url: "https://registry.npmjs.org"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Get yarn cache directory path
         id: yarn-cache-dir-path
@@ -39,41 +41,49 @@ jobs:
 
       - name: Install Dependencies
         run: yarn
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Update version to alpha
-        run: yarn version --prerelease --preid=alpha --no-git --no-git-tag-version
-
-      - name: Build NPM package
-        run: yarn pack && mv baileys-*.tgz baileys-nightly.tgz
+      - name: Publish in NPM (as `baileys`)
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      
+      - name: Publish in NPM (whiskeysockets scope)
+        run: |
+          npx json -I -f package.json -e "this.name='@whiskeysockets/baileys'"
+          npm publish --access public --//registry.npmjs.org/:_authToken=$NPM_TOKEN
+          npx json -I -f package.json -e "this.name='baileys'"
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Generate Changelog
         id: generate_changelog
         run: |
-          changelog=$(yarn run --silent changelog:preview)
+          changelog=$(npm run changelog:last --silent)
           echo "changelog<<EOF" >> $GITHUB_OUTPUT
           echo "${changelog}" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Update Nightly TAG
-        uses: richardsimko/update-tag@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: nightly
+      - name: Make Package
+        run: npm pack
 
-      - name: Update Nightly Release
+      - name: Rename Pack
+        run: mv *.tgz baileys.tgz
+
+      - name: Create Release
         uses: meeDamian/github-release@2.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          tag: nightly
+          tag: ${{ github.ref }}
           commitish: ${{ github.sha }}
-          name: Nightly Release
+          name: ${{ github.ref_name }}
           body: ${{ steps.generate_changelog.outputs.changelog }}
           draft: false
-          prerelease: true
+          prerelease: false
           files: >
-            baileys-nightly.tgz
+            baileys.tgz
           gzip: folders
           allow_override: true

@@ -63,7 +63,7 @@ export const processHistoryMessage = (item: proto.IHistorySync) => {
 
 				if(
 					(message.messageStubType === WAMessageStubType.BIZ_PRIVACY_MODE_TO_BSP
-						|| message.messageStubType === WAMessageStubType.BIZ_PRIVACY_MODE_TO_FB
+					|| message.messageStubType === WAMessageStubType.BIZ_PRIVACY_MODE_TO_FB
 					)
 					&& message.messageStubParameters?.[0]
 				) {

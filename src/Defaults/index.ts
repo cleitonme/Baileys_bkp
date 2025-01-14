@@ -20,7 +20,7 @@ export const PHONE_CONNECTION_CB = 'CB:Pong'
 
 export const WA_DEFAULT_EPHEMERAL = 7 * 24 * 60 * 60
 
-const WA_VERSION = '2.24.13.79'
+const WA_VERSION = '2.24.6.77'
 
 const WA_VERSION_HASH = createHash('md5').update(WA_VERSION).digest('hex')
 export const MOBILE_TOKEN = Buffer.from('0a1mLfGUIBVrMKF1RdvLI5lkRBvof6vn0fD2QRSM' + WA_VERSION_HASH)
@@ -39,7 +39,7 @@ export const NOISE_WA_HEADER = Buffer.from(
 export const PROTOCOL_VERSION = [5, 2]
 export const MOBILE_NOISE_HEADER = Buffer.concat([Buffer.from('WA'), Buffer.from(PROTOCOL_VERSION)])
 /** from: https://stackoverflow.com/questions/3809401/what-is-a-good-regular-expression-to-match-a-url */
-export const URL_REGEX = /(http(s)?:\/\/.)?(www\.)?[-a-zA-Z0-9@:%._+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_+.~#?&//=]*)/
+export const URL_REGEX = /(http(s)?:\/\/.)?(www\.)?[-a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)/
 
 export const WA_CERT_DETAILS = {
 	SERIAL: 0,
@@ -49,55 +49,49 @@ export const PROCESSABLE_HISTORY_TYPES = [
 	proto.Message.HistorySyncNotification.HistorySyncType.INITIAL_BOOTSTRAP,
 	proto.Message.HistorySyncNotification.HistorySyncType.PUSH_NAME,
 	proto.Message.HistorySyncNotification.HistorySyncType.RECENT,
-	proto.Message.HistorySyncNotification.HistorySyncType.FULL
+	proto.Message.HistorySyncNotification.HistorySyncType.FULL,
+	proto.Message.HistorySyncNotification.HistorySyncType.ON_DEMAND,
 ]
 
 export const DEFAULT_CONNECTION_CONFIG: SocketConfig = {
-	auth: undefined as unknown as AuthenticationState,
 	version: version as WAVersion,
 	browser: Browsers.ubuntu('Chrome'),
 	waWebSocketUrl: 'wss://web.whatsapp.com/ws/chat',
-	logger: logger.child({ class: 'baileys' }),
-	defaultQueryTimeoutMs: 60_000,
-	markOnlineOnConnect: true,
-	fireInitQueries: true,
-	printQRInTerminal: false,
-	emitOwnEvents: false,
-	ignoreOfflineMessages: false,
-	syncFullHistory: false,
-	generateHighQualityLinkPreview: false,
-	resendReceipt: true,
 	connectTimeoutMs: 20_000,
 	keepAliveIntervalMs: 30_000,
-	maxMsgRetryCount: 5,
-	retryRequestDelayMs: 300,
-	linkPreviewImageThumbnailWidth: 192,
+	logger: logger.child({ class: 'baileys' }),
+	printQRInTerminal: false,
+	emitOwnEvents: true,
+	defaultQueryTimeoutMs: 60_000,
 	customUploadHosts: [],
-	blacklistLinkPreview: [],
-	transactionOpts: {
-		maxCommitRetries: 20,
-		delayBetweenTriesMs: 500
-	},
+	retryRequestDelayMs: 250,
+	maxMsgRetryCount: 5,
+	fireInitQueries: true,
+	auth: undefined as unknown as AuthenticationState,
+	markOnlineOnConnect: true,
+	syncFullHistory: false,
+	patchMessageBeforeSending: msg => msg,
+	shouldSyncHistoryMessage: () => true,
+	shouldIgnoreJid: () => false,
+	linkPreviewImageThumbnailWidth: 192,
+	transactionOpts: { maxCommitRetries: 10, delayBetweenTriesMs: 3000 },
+	generateHighQualityLinkPreview: false,
+	options: { },
 	appStateMacVerification: {
 		patch: false,
 		snapshot: false,
 	},
-	options: { },
-	patchMessageBeforeSending: (msg) => msg,
-	shouldSyncHistoryMessage: () => true,
-	shouldIgnoreJid: () => false,
-	shouldIgnoreParticipant: () => false,
 	getMessage: async() => undefined,
 	cachedGroupMetadata: async() => undefined,
 	makeSignalRepository: makeLibSignalRepository
 }
 
 export const MEDIA_PATH_MAP: { [T in MediaType]?: string } = {
-	'image': '/mms/image',
-	'video': '/mms/video',
-	'document': '/mms/document',
-	'audio': '/mms/audio',
-	'sticker': '/mms/image',
+	image: '/mms/image',
+	video: '/mms/video',
+	document: '/mms/document',
+	audio: '/mms/audio',
+	sticker: '/mms/image',
 	'thumbnail-link': '/mms/image',
 	'product-catalog-image': '/product/image',
 	'md-app-state': '',
@@ -132,8 +126,8 @@ export const MIN_PREKEY_COUNT = 5
 export const INITIAL_PREKEY_COUNT = 30
 
 export const DEFAULT_CACHE_TTLS = {
-	SIGNAL_STORE: 10 * 60, // 10 minutes
+	SIGNAL_STORE: 5 * 60, // 5 minutes
 	MSG_RETRY: 60 * 60, // 1 hour
 	CALL_OFFER: 5 * 60, // 5 minutes
-	USER_DEVICES: 30 * 60, // 30 minutes
+	USER_DEVICES: 5 * 60, // 5 minutes
 }
